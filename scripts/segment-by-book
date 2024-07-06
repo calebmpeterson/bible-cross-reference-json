@@ -1,0 +1,52 @@
+#!/usr/bin/env zx
+
+import _ from "lodash";
+
+import BOOK_TITLES from "../src/reference/book-abbreviation-to-title.json" with { type: 'json' };
+
+const parseVerseReference = (ref) => {
+  const [book, chapter, verse] = ref.split(" ");
+  return { book, chapter, verse };
+};
+
+const SOURCE_DATA_FILES = _.range(1, 33).map(
+  (index) => `./src/data/${index}.json`
+);
+
+const allRecords = SOURCE_DATA_FILES.reduce((accum, filename) => {
+  const data = JSON.parse(fs.readFileSync(filename, "utf8"));
+  return { ...accum, ...data };
+}, {});
+
+const byBook = _.groupBy(
+  Object.values(allRecords),
+  (record) => parseVerseReference(record.v).book
+);
+
+await $`rm -rf ./cross-references`;
+await $`mkdir -p ./cross-references`;
+await $`mkdir -p ./cross-references/reference`;
+await $`cp ./src/reference/* ./cross-references/reference`;
+
+Object.keys(byBook).map((book, index) => {
+  const bookTitle = BOOK_TITLES[book];
+
+  if (!bookTitle) {
+    throw new Error(`Missing title for ${book}`);
+  }
+
+  const basename = _.chain(bookTitle).toLower().kebabCase().value();
+
+  const recordsForBook = byBook[book].map((record) => ({
+    v: record.v,
+    r: record.r ? Object.values(record.r) : [],
+  }));
+
+  fs.writeFileSync(
+    `./cross-references/${basename}.json`,
+    JSON.stringify(recordsForBook, null, 2),
+    "utf8"
+  );
+
+  console.log(`✔️ ${bookTitle}`);
+});
